@@ -46,7 +46,7 @@ struct PlanningPanelView: View {
                     }
                     Spacer()
                     Button {
-                        Task { await panel.sync() }
+                        Task { await panel.refresh() }
                     } label: {
                         Image(systemName: panel.isLoading ? "arrow.clockwise" : "arrow.triangle.2.circlepath")
                             .font(.caption)

@@ -12,7 +12,7 @@ final class PlanningPanel: Panel, ObservableObject {
     @Published var displayTitle: String = "Planning"
     var displayIcon: String? { "list.bullet.clipboard" }
 
-    // Beads state
+    // UI state
     @Published var beads: [BeadSummary] = []
     @Published var epics: [EpicInfo] = []
     @Published var selectedBeadId: String?
@@ -23,72 +23,71 @@ final class PlanningPanel: Panel, ObservableObject {
     @Published var lastSync: Date?
 
     private var refreshTimer: Timer?
-    private let doltHost: String
-    private let doltPort: UInt16
-    private let doltDatabase: String
 
-    public init(
-        id: UUID = UUID(),
-        doltHost: String = "127.0.0.1",
-        doltPort: UInt16 = 59300,
-        doltDatabase: String = "vis"
-    ) {
+    init(id: UUID = UUID()) {
         self.id = id
-        self.doltHost = doltHost
-        self.doltPort = doltPort
-        self.doltDatabase = doltDatabase
     }
 
-    public func close() {
+    func close() {
         refreshTimer?.invalidate()
         refreshTimer = nil
     }
 
-    public func focus() {
+    func focus() {
         startRefreshTimer()
         Task { await refresh() }
     }
 
-    public func unfocus() {
-        // Keep timer running for background updates
-    }
+    func unfocus() {}
+    func triggerFlash(reason: WorkspaceAttentionFlashReason) {}
 
-    public func triggerFlash(reason: WorkspaceAttentionFlashReason) {
-        // TODO: implement attention flash
-    }
-
-    // MARK: - Data Loading
+    // MARK: - Data
 
     func refresh() async {
         isLoading = true
         defer { isLoading = false }
 
-        // TODO: Connect to Dolt via MySQL and fetch beads
-        // For now, use the factory CLI as a bridge
-        await loadBeadsViaCLI()
+        // Use factory CLI with JSON output for structured data
+        if let json = await runFactory(["list", "--json"]) {
+            if let data = json.data(using: .utf8),
+               let items = try? JSONDecoder().decode([CLIBeadSummary].self, from: data) {
+                beads = items.map { $0.toBeadSummary() }
+            }
+        }
+
         lastSync = Date()
     }
 
-    func sync() async {
-        isLoading = true
-        defer { isLoading = false }
-
-        // Run factory sync command
-        let result = await runFactoryCLI(["sync"])
-        print("[planning] sync: \(result ?? "no output")")
-        await refresh()
-    }
-
-    func investigate(beadId: String) {
-        // Open a new terminal workspace with claude investigating this bead
-        Task {
-            let _ = await runFactoryCLI(["investigate", beadId])
+    func loadDetail(for beadId: String) async {
+        if let json = await runFactory(["show", beadId, "--json"]) {
+            if let data = json.data(using: .utf8),
+               let detail = try? JSONDecoder().decode(CLIBeadDetail.self, from: data) {
+                selectedDetail = detail.toBeadDetail()
+            }
         }
     }
 
-    func delegate(beadId: String, formula: String = "implement") {
+    func investigate(beadId: String) {
+        let cmuxCLI = "/Applications/cmux.app/Contents/Resources/bin/cmux"
+        let jiraKey = beadId.uppercased()
         Task {
-            let _ = await runFactoryCLI(["delegate", beadId, "--formula", formula])
+            await loadDetail(for: beadId)
+            let desc = (selectedDetail?.description ?? "").prefix(400)
+                .replacingOccurrences(of: "'", with: "'\\''")
+                .replacingOccurrences(of: "\n", with: " ")
+            let prompt = "Investigate \(jiraKey): \(selectedDetail?.title ?? ""). Description: \(desc)"
+            let cmd = "claude -p '\(prompt)'"
+
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: cmuxCLI)
+            process.arguments = ["new-workspace", "--name", jiraKey, "--command", cmd]
+            try? process.run()
+        }
+    }
+
+    func delegate(beadId: String) {
+        Task {
+            let _ = await runFactory(["delegate", beadId, "--formula", "implement"])
         }
     }
 
@@ -103,44 +102,7 @@ final class PlanningPanel: Panel, ObservableObject {
         }
     }
 
-    private func loadBeadsViaCLI() async {
-        // Use factory list --json (once we add JSON output)
-        // For now, parse the text output
-        guard let output = await runFactoryCLI(["list"]) else { return }
-
-        var newBeads: [BeadSummary] = []
-        for line in output.components(separatedBy: "\n") where !line.isEmpty {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard !trimmed.isEmpty else { continue }
-
-            // Parse: "VIS-2228   [Selected for Development] P2 Title..."
-            let parts = trimmed.components(separatedBy: CharacterSet.whitespaces)
-            guard parts.count >= 3 else { continue }
-
-            let id = parts[0].lowercased()
-            // Extract status from brackets
-            var status = "open"
-            if let startBracket = trimmed.firstIndex(of: "["),
-               let endBracket = trimmed.firstIndex(of: "]") {
-                status = String(trimmed[trimmed.index(after: startBracket)..<endBracket])
-                    .trimmingCharacters(in: .whitespaces)
-            }
-
-            let bead = BeadSummary(
-                id: id,
-                title: String(trimmed.suffix(from: trimmed.index(after: trimmed.firstIndex(of: "]") ?? trimmed.startIndex)))
-                    .trimmingCharacters(in: .whitespaces),
-                status: status,
-                priority: 2,
-                issueType: "task",
-                attention: []
-            )
-            newBeads.append(bead)
-        }
-        self.beads = newBeads
-    }
-
-    private func runFactoryCLI(_ args: [String]) async -> String? {
+    private func runFactory(_ args: [String]) async -> String? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/Users/clavery/factory/target/debug/factory")
         process.arguments = args
@@ -156,9 +118,65 @@ final class PlanningPanel: Panel, ObservableObject {
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
             return String(data: data, encoding: .utf8)
         } catch {
-            print("[planning] CLI error: \(error)")
             return nil
         }
+    }
+}
+
+// MARK: - CLI JSON Types (Decodable)
+
+private struct CLIBeadSummary: Decodable {
+    let id: String
+    let title: String
+    let status: String
+    let jira_status: String?
+    let priority: Int
+    let issue_type: String
+    let assignee: String?
+    let labels: [String]?
+    let parent: String?
+    let pr: String?
+    let pr_state: String?
+    let ci: String?
+    let review: String?
+    let attention: [String]?
+
+    func toBeadSummary() -> BeadSummary {
+        BeadSummary(
+            id: id, title: title, status: status,
+            jiraStatus: jira_status, priority: priority,
+            issueType: issue_type, assignee: assignee,
+            labels: labels ?? [], parent: parent,
+            pr: pr, prState: pr_state, ci: ci,
+            review: review, attention: attention ?? []
+        )
+    }
+}
+
+private struct CLIBeadDetail: Decodable {
+    let id: String
+    let title: String
+    let description: String?
+    let status: String
+    let priority: Int
+    let issue_type: String?
+    let assignee: String?
+    let external_ref: String?
+    let parent: String?
+    let labels: [String]?
+    let created_at: String?
+    let updated_at: String?
+
+    func toBeadDetail() -> BeadDetail {
+        BeadDetail(
+            id: id, title: title,
+            description: description ?? "",
+            status: status, jiraStatus: nil,
+            priority: priority, issueType: issue_type,
+            assignee: assignee, externalRef: external_ref,
+            parent: parent, labels: labels ?? [],
+            createdAt: created_at, updatedAt: updated_at
+        )
     }
 }
 
@@ -168,12 +186,21 @@ struct BeadSummary: Identifiable {
     let id: String
     let title: String
     let status: String
+    let jiraStatus: String?
     let priority: Int
     let issueType: String
+    let assignee: String?
+    let labels: [String]
+    let parent: String?
+    let pr: String?
+    let prState: String?
+    let ci: String?
+    let review: String?
     let attention: [String]
 
     var isEpic: Bool { issueType == "epic" }
     var jiraKey: String { id.uppercased() }
+    var displayStatus: String { jiraStatus ?? status }
 }
 
 struct EpicInfo: Identifiable {
@@ -189,9 +216,17 @@ struct BeadDetail {
     let status: String
     let jiraStatus: String?
     let priority: Int
+    let issueType: String?
+    let assignee: String?
     let externalRef: String?
     let parent: String?
     let labels: [String]
+    let createdAt: String?
+    let updatedAt: String?
+
+    var jiraKey: String { id.uppercased() }
+    var isEpic: Bool { issueType == "epic" }
+    var isLocal: Bool { externalRef == nil }
 }
 
 enum AssignmentFilter: String, CaseIterable {
