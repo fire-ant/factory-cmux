@@ -108,16 +108,29 @@ final class PlanningPanel: Panel, ObservableObject {
             """
             try? systemPrompt.write(toFile: promptFile, atomically: true, encoding: .utf8)
 
-            // Launch claude with --resume so it kicks off AND stays interactive
-            let initialPrompt = "Investigate \(jiraKey). Read your system prompt for the full ticket description. Explore the codebase, assess what needs to change, and give me your findings and a proposed plan."
-                .replacingOccurrences(of: "'", with: "'\\''")
-
-            let cmd = "claude --dangerously-skip-permissions --system-prompt-file \(promptFile) --resume -p '\(initialPrompt)'"
+            // Start claude interactive, then use cmux send-key to submit the prompt
+            // The --command starts claude, then we send the investigation text + Enter
+            let cmd = "claude --dangerously-skip-permissions --system-prompt-file \(promptFile)"
 
             let process = Process()
             process.executableURL = URL(fileURLWithPath: cmuxCLI)
             process.arguments = ["new-workspace", "--name", jiraKey, "--command", cmd]
             try? process.run()
+
+            // Wait for claude to be ready, then send the kick-off prompt
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+
+            let message = "Investigate \(jiraKey). Read your system prompt for the full ticket description. Explore the codebase, assess what needs to change, and give me your findings and a proposed plan."
+
+            let send = Process()
+            send.executableURL = URL(fileURLWithPath: cmuxCLI)
+            send.arguments = ["send", message]
+            try? send.run()
+
+            let enter = Process()
+            enter.executableURL = URL(fileURLWithPath: cmuxCLI)
+            enter.arguments = ["send-key", "enter"]
+            try? enter.run()
         }
     }
 
