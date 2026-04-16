@@ -6227,6 +6227,8 @@ struct ContentView: View {
             return String(localized: "commandPalette.kind.browser", defaultValue: "Browser")
         case .markdown:
             return String(localized: "commandPalette.kind.markdown", defaultValue: "Markdown")
+        case .planning:
+            return "Planning"
         }
     }
 
@@ -6238,6 +6240,8 @@ struct ContentView: View {
             return ["browser", "web", "page"]
         case .markdown:
             return ["markdown", "note", "preview"]
+        case .planning:
+            return ["planning", "beads", "work", "factory"]
         }
     }
 

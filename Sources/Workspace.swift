@@ -493,6 +493,14 @@ extension Workspace {
             terminalSnapshot = nil
             browserSnapshot = nil
             markdownSnapshot = SessionMarkdownPanelSnapshot(filePath: markdownPanel.filePath)
+        case .planning:
+            terminalSnapshot = nil
+            browserSnapshot = nil
+            markdownSnapshot = nil
+        case .planning:
+            terminalSnapshot = nil
+            browserSnapshot = nil
+            markdownSnapshot = nil
         }
 
         return SessionPanelSnapshot(
@@ -683,6 +691,8 @@ extension Workspace {
             }
             applySessionPanelMetadata(snapshot, toPanelId: markdownPanel.id)
             return markdownPanel.id
+        case .planning:
+            return nil
         }
     }
 
@@ -7265,6 +7275,8 @@ final class Workspace: Identifiable, ObservableObject {
         case .browser:
             return SurfaceKind.browser
         case .markdown:
+            return SurfaceKind.markdown
+        case .planning:
             return SurfaceKind.markdown
         }
     }

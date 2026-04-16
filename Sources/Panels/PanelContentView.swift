@@ -55,6 +55,10 @@ struct PanelContentView: View {
                     onRequestPanelFocus: onRequestPanelFocus
                 )
             }
+        case .planning:
+            if let planningPanel = panel as? PlanningPanel {
+                PlanningPanelView(panel: planningPanel)
+            }
         }
     }
 }

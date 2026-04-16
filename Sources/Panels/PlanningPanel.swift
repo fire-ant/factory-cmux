@@ -5,12 +5,12 @@ import SwiftUI
 /// Panel type for the Factory planning view.
 /// Shows beads sidebar + plan/detail view in a single tab.
 @MainActor
-public class PlanningPanel: Panel, ObservableObject {
-    public let id: UUID
-    public let panelType: PanelType = .planning
+final class PlanningPanel: Panel, ObservableObject {
+    let id: UUID
+    let panelType: PanelType = .planning
 
-    @Published public var displayTitle: String = "Planning"
-    public var displayIcon: String? { "list.bullet.clipboard" }
+    @Published var displayTitle: String = "Planning"
+    var displayIcon: String? { "list.bullet.clipboard" }
 
     // Beads state
     @Published var beads: [BeadSummary] = []
