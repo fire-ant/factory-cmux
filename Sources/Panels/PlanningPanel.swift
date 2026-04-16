@@ -72,11 +72,35 @@ final class PlanningPanel: Panel, ObservableObject {
         let jiraKey = beadId.uppercased()
         Task {
             await loadDetail(for: beadId)
-            let desc = (selectedDetail?.description ?? "").prefix(400)
+            let title = selectedDetail?.title ?? ""
+            let desc = (selectedDetail?.description ?? "")
                 .replacingOccurrences(of: "'", with: "'\\''")
-                .replacingOccurrences(of: "\n", with: " ")
-            let prompt = "Investigate \(jiraKey): \(selectedDetail?.title ?? ""). Description: \(desc)"
-            let cmd = "claude -p '\(prompt)'"
+
+            // Write context to a temp file for the system prompt
+            let promptFile = "/tmp/factory-investigate-\(beadId).md"
+            let systemPrompt = """
+            # Investigating \(jiraKey): \(title)
+
+            You are investigating this ticket to understand its scope and plan the work.
+
+            ## Description
+
+            \(selectedDetail?.description ?? "No description")
+
+            ## Instructions
+
+            1. Read the description carefully
+            2. Explore the relevant codebase to understand what needs to change
+            3. Assess complexity and risks
+            4. Propose an implementation approach
+            5. Record findings: run `bd comment \(beadId) "Investigation: <findings>"`
+
+            You have access to the full codebase. Use Read, Grep, Glob, Bash as needed.
+            """
+            try? systemPrompt.write(toFile: promptFile, atomically: true, encoding: .utf8)
+
+            // Launch interactive claude session with the system prompt
+            let cmd = "claude --system-prompt-file \(promptFile) --allowedTools 'Bash,Read,Grep,Glob'"
 
             let process = Process()
             process.executableURL = URL(fileURLWithPath: cmuxCLI)
