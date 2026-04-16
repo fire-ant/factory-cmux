@@ -11403,7 +11403,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
 
         // Open planning panel: Cmd+Shift+B (Beads)
-        if event.modifierFlags.contains([.command, .shift]) && event.charactersIgnoringModifiers == "b" {
+        if event.modifierFlags.contains([.command, .shift]) &&
+           event.charactersIgnoringModifiers?.lowercased() == "b" {
             openPlanningPanel()
             return true
         }
