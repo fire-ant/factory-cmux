@@ -22,6 +22,9 @@ final class PlanningPanel: Panel, ObservableObject {
     @Published var isLoading = false
     @Published var lastSync: Date?
 
+    // Session tracking: bead ID → claude session ID
+    @Published var beadSessions: [String: String] = [:]
+
     private var refreshTimer: Timer?
 
     init(id: UUID = UUID()) {
@@ -70,11 +73,25 @@ final class PlanningPanel: Panel, ObservableObject {
     func investigate(beadId: String) {
         let cmuxCLI = "/Applications/cmux.app/Contents/Resources/bin/cmux"
         let jiraKey = beadId.uppercased()
+
+        // Check if there's an existing session for this bead
+        if let sessionId = beadSessions[beadId] {
+            // Resume existing session in a new workspace
+            let cmd = "claude --resume \(sessionId) --dangerously-skip-permissions"
+            Task {
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: cmuxCLI)
+                process.arguments = ["new-workspace", "--name", "\(jiraKey) ↩", "--command", cmd]
+                try? process.run()
+            }
+            return
+        }
+
+        // New investigation — create session
         Task {
             await loadDetail(for: beadId)
             let title = selectedDetail?.title ?? ""
 
-            // Write context to a temp file for the system prompt
             let promptFile = "/tmp/factory-investigate-\(beadId).md"
             let systemPrompt = """
             # Investigating \(jiraKey): \(title)
@@ -108,16 +125,16 @@ final class PlanningPanel: Panel, ObservableObject {
             """
             try? systemPrompt.write(toFile: promptFile, atomically: true, encoding: .utf8)
 
-            // Start claude interactive, then use cmux send-key to submit the prompt
-            // The --command starts claude, then we send the investigation text + Enter
-            let cmd = "claude --dangerously-skip-permissions --system-prompt-file \(promptFile)"
+            // Start claude with --name so we can find the session later
+            let sessionName = "factory-\(beadId)"
+            let cmd = "claude --dangerously-skip-permissions --system-prompt-file \(promptFile) --name \(sessionName)"
 
             let process = Process()
             process.executableURL = URL(fileURLWithPath: cmuxCLI)
             process.arguments = ["new-workspace", "--name", jiraKey, "--command", cmd]
             try? process.run()
 
-            // Wait for claude to be ready, then send the kick-off prompt with \n (Enter)
+            // Wait for claude to be ready, then send the kick-off prompt
             try? await Task.sleep(nanoseconds: 5_000_000_000)
 
             let message = "Investigate \(jiraKey). Read your system prompt for the full ticket description. Explore the codebase, assess what needs to change, and give me your findings and a proposed plan.\\n"
@@ -126,7 +143,41 @@ final class PlanningPanel: Panel, ObservableObject {
             send.executableURL = URL(fileURLWithPath: cmuxCLI)
             send.arguments = ["send", message]
             try? send.run()
+
+            // Capture the session ID by looking up the named session
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            if let sessionId = await lookupClaudeSession(name: sessionName) {
+                beadSessions[beadId] = sessionId
+                // Persist to Dolt via factory CLI
+                let _ = await runFactory(["remember", "session:\(beadId)=\(sessionId)"])
+            }
         }
+    }
+
+    /// Look up a Claude session ID by name
+    private func lookupClaudeSession(name: String) async -> String? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["claude", "sessions", "--json"]
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+                for session in json {
+                    if let title = session["title"] as? String, title.contains(name),
+                       let id = session["id"] as? String {
+                        return id
+                    }
+                }
+            }
+        } catch {}
+        return nil
     }
 
     func delegate(beadId: String) {
