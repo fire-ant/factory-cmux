@@ -125,15 +125,13 @@ final class PlanningPanel: Panel, ObservableObject {
             """
             try? systemPrompt.write(toFile: promptFile, atomically: true, encoding: .utf8)
 
-            // Reliable auto-prompt: write a shell script that uses a background
-            // sleep + cmux send from WITHIN the cmux terminal (so socket auth works)
+            // Auto-prompt: background job sends to THIS workspace using $CMUX_WORKSPACE_ID
+            // This targets the exact workspace, not whatever's focused
             let sessionName = "factory-\(beadId)"
             let investigatePrompt = "Investigate \(jiraKey). Read your system prompt for the full ticket description. Explore the codebase, assess what needs to change, and give me your findings and a proposed plan."
                 .replacingOccurrences(of: "'", with: "'\\''")
 
-            // The trick: launch a background job that waits then sends via cmux,
-            // THEN start claude. Since we're inside a cmux terminal, send works.
-            let cmd = "(sleep 5 && cmux send '\(investigatePrompt)\\n') & claude --dangerously-skip-permissions --system-prompt-file \(promptFile) --name \(sessionName)"
+            let cmd = "(sleep 5 && cmux send --workspace $CMUX_WORKSPACE_ID '\(investigatePrompt)\\n') & claude --dangerously-skip-permissions --system-prompt-file \(promptFile) --name \(sessionName)"
 
             let process = Process()
             process.executableURL = URL(fileURLWithPath: cmuxCLI)
