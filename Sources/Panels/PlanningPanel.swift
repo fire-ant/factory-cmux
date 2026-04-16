@@ -87,7 +87,7 @@ final class PlanningPanel: Panel, ObservableObject {
             return
         }
 
-        // New investigation — create session
+        // New investigation — open claude with system prompt in repo context
         Task {
             await loadDetail(for: beadId)
             let title = selectedDetail?.title ?? ""
@@ -125,7 +125,8 @@ final class PlanningPanel: Panel, ObservableObject {
             """
             try? systemPrompt.write(toFile: promptFile, atomically: true, encoding: .utf8)
 
-            // Start claude with --name so we can find the session later
+            // Open claude with system prompt — Claude knows the full context
+            // User types "investigate this" or any specific question to kick off
             let sessionName = "factory-\(beadId)"
             let cmd = "claude --dangerously-skip-permissions --system-prompt-file \(promptFile) --name \(sessionName)"
 
@@ -133,24 +134,6 @@ final class PlanningPanel: Panel, ObservableObject {
             process.executableURL = URL(fileURLWithPath: cmuxCLI)
             process.arguments = ["new-workspace", "--name", jiraKey, "--command", cmd]
             try? process.run()
-
-            // Wait for claude to be ready, then send the kick-off prompt
-            try? await Task.sleep(nanoseconds: 5_000_000_000)
-
-            let message = "Investigate \(jiraKey). Read your system prompt for the full ticket description. Explore the codebase, assess what needs to change, and give me your findings and a proposed plan.\\n"
-
-            let send = Process()
-            send.executableURL = URL(fileURLWithPath: cmuxCLI)
-            send.arguments = ["send", message]
-            try? send.run()
-
-            // Capture the session ID by looking up the named session
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            if let sessionId = await lookupClaudeSession(name: sessionName) {
-                beadSessions[beadId] = sessionId
-                // Persist to Dolt via factory CLI
-                let _ = await runFactory(["remember", "session:\(beadId)=\(sessionId)"])
-            }
         }
     }
 
