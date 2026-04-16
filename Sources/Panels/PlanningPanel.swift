@@ -117,20 +117,15 @@ final class PlanningPanel: Panel, ObservableObject {
             process.arguments = ["new-workspace", "--name", jiraKey, "--command", cmd]
             try? process.run()
 
-            // Wait for claude to be ready, then send the kick-off prompt
-            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            // Wait for claude to be ready, then send the kick-off prompt with \n (Enter)
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
 
-            let message = "Investigate \(jiraKey). Read your system prompt for the full ticket description. Explore the codebase, assess what needs to change, and give me your findings and a proposed plan."
+            let message = "Investigate \(jiraKey). Read your system prompt for the full ticket description. Explore the codebase, assess what needs to change, and give me your findings and a proposed plan.\\n"
 
             let send = Process()
             send.executableURL = URL(fileURLWithPath: cmuxCLI)
             send.arguments = ["send", message]
             try? send.run()
-
-            let enter = Process()
-            enter.executableURL = URL(fileURLWithPath: cmuxCLI)
-            enter.arguments = ["send-key", "enter"]
-            try? enter.run()
         }
     }
 
