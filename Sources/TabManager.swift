@@ -5366,6 +5366,20 @@ class TabManager: ObservableObject {
         )
     }
 
+    // MARK: - Planning
+
+    /// Open the planning panel in the currently focused workspace.
+    @discardableResult
+    func openPlanning() -> UUID? {
+        guard let tabId = selectedTabId,
+              let workspace = tabs.first(where: { $0.id == tabId }),
+              let paneId = workspace.bonsplitController.focusedPaneId else { return nil }
+        if selectedTabId != tabId {
+            selectedTabId = tabId
+        }
+        return workspace.newPlanningPanel(inPane: paneId, focus: true)?.id
+    }
+
     /// Reopen the most recently closed browser panel (Cmd+Shift+T).
     /// No-op when no browser panel restore snapshot is available.
     @discardableResult

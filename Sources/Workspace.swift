@@ -6726,6 +6726,7 @@ final class Workspace: Identifiable, ObservableObject {
         static let terminal = "terminal"
         static let browser = "browser"
         static let markdown = "markdown"
+        static let planning = "planning"
     }
 
     enum PanelShellActivityState: String {
@@ -9188,6 +9189,61 @@ final class Workspace: Identifiable, ObservableObject {
         browserPanel.setRemoteWorkspaceStatus(browserRemoteWorkspaceStatusSnapshot())
 
         return browserPanel
+    }
+
+    // MARK: - Planning Panel
+
+    @discardableResult
+    func newPlanningPanel(inPane paneId: PaneID, focus: Bool? = nil) -> PlanningPanel? {
+        // Reuse existing planning panel in this workspace
+        for (panelId, panel) in panels {
+            if let planning = panel as? PlanningPanel {
+                if let surfaceId = surfaceIdToPanelId.first(where: { $0.value == panelId })?.key {
+                    bonsplitController.selectTab(surfaceId)
+                    planning.focus()
+                }
+                return planning
+            }
+        }
+
+        let shouldFocusNewTab = focus ?? (bonsplitController.focusedPaneId == paneId)
+        let previousFocusedPanelId = focusedPanelId
+        let previousHostedView = focusedTerminalPanel?.hostedView
+
+        let planningPanel = PlanningPanel()
+        panels[planningPanel.id] = planningPanel
+        panelTitles[planningPanel.id] = planningPanel.displayTitle
+
+        guard let newTabId = bonsplitController.createTab(
+            title: planningPanel.displayTitle,
+            icon: planningPanel.displayIcon,
+            kind: SurfaceKind.planning,
+            isDirty: planningPanel.isDirty,
+            isLoading: false,
+            isPinned: false,
+            inPane: paneId
+        ) else {
+            panels.removeValue(forKey: planningPanel.id)
+            panelTitles.removeValue(forKey: planningPanel.id)
+            return nil
+        }
+
+        surfaceIdToPanelId[newTabId] = planningPanel.id
+
+        if shouldFocusNewTab {
+            bonsplitController.focusPane(paneId)
+            bonsplitController.selectTab(newTabId)
+            planningPanel.focus()
+            applyTabSelection(tabId: newTabId, inPane: paneId)
+        } else {
+            preserveFocusAfterNonFocusSplit(
+                preferredPanelId: previousFocusedPanelId,
+                splitPanelId: planningPanel.id,
+                previousHostedView: previousHostedView
+            )
+        }
+
+        return planningPanel
     }
 
     /// Open the markdown viewer for `filePath`, reusing an existing

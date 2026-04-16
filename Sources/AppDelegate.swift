@@ -11402,6 +11402,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             return true
         }
 
+        // Open planning panel: Cmd+Shift+B (Beads)
+        if event.modifierFlags.contains([.command, .shift]) && event.charactersIgnoringModifiers == "b" {
+            openPlanningPanel()
+            return true
+        }
+
         if matchConfiguredShortcut(event: event, action: .focusBrowserAddressBar) {
             if let focusedPanel = tabManager?.focusedBrowserPanel {
                 focusBrowserAddressBar(in: focusedPanel)
@@ -11670,6 +11676,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     @discardableResult
+    @objc func openPlanningPanel(_ sender: Any? = nil) {
+        _ = tabManager?.openPlanning()
+    }
+
     func openBrowserAndFocusAddressBar(url: URL? = nil, insertAtEnd: Bool = false) -> UUID? {
         let preferredProfileID =
             tabManager?.focusedBrowserPanel?.profileID
