@@ -73,8 +73,15 @@ final class PlanningPanel: Panel, ObservableObject {
         Task {
             await loadDetail(for: beadId)
             let title = selectedDetail?.title ?? ""
-            let desc = (selectedDetail?.description ?? "")
-                .replacingOccurrences(of: "'", with: "'\\''")
+            let labels = selectedDetail?.labels ?? []
+
+            // Determine which repo based on labels or default
+            let repoPath: String
+            if labels.contains("infrastructure") || labels.contains("PLATFORM") {
+                repoPath = "/Users/clavery/git/medicine-wheel"
+            } else {
+                repoPath = "/Users/clavery/git/stonehenge"
+            }
 
             // Write context to a temp file for the system prompt
             let promptFile = "/tmp/factory-investigate-\(beadId).md"
@@ -82,6 +89,7 @@ final class PlanningPanel: Panel, ObservableObject {
             # Investigating \(jiraKey): \(title)
 
             You are investigating this ticket to understand its scope and plan the work.
+            You are working in the \(repoPath.components(separatedBy: "/").last ?? "repo") repository.
 
             ## Description
 
@@ -90,21 +98,34 @@ final class PlanningPanel: Panel, ObservableObject {
             ## Instructions
 
             1. Read the description carefully
-            2. Explore the relevant codebase to understand what needs to change
+            2. Explore the codebase to understand what needs to change
             3. Assess complexity and risks
             4. Propose an implementation approach
             5. Record findings: run `bd comment \(beadId) "Investigation: <findings>"`
+
+            ## Bead Info
+            - ID: \(beadId)
+            - JIRA: \(jiraKey)
+            - Status: \(selectedDetail?.status ?? "unknown")
+            - Priority: P\(selectedDetail?.priority ?? 2)
 
             You have access to the full codebase. Use Read, Grep, Glob, Bash as needed.
             """
             try? systemPrompt.write(toFile: promptFile, atomically: true, encoding: .utf8)
 
-            // Launch interactive claude session with the system prompt
-            let cmd = "claude --system-prompt-file \(promptFile) --allowedTools 'Bash,Read,Grep,Glob'"
+            // Launch interactive claude session in the repo directory
+            // No -p flag — Claude starts interactive with system prompt loaded
+            // User types the first message to direct the investigation
+            let cmd = "claude --dangerously-skip-permissions --system-prompt-file \(promptFile)"
 
             let process = Process()
             process.executableURL = URL(fileURLWithPath: cmuxCLI)
-            process.arguments = ["new-workspace", "--name", jiraKey, "--command", cmd]
+            process.arguments = [
+                "new-workspace",
+                "--name", jiraKey,
+                "--cwd", repoPath,
+                "--command", cmd
+            ]
             try? process.run()
         }
     }
