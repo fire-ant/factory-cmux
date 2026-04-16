@@ -108,27 +108,16 @@ final class PlanningPanel: Panel, ObservableObject {
             """
             try? systemPrompt.write(toFile: promptFile, atomically: true, encoding: .utf8)
 
-            // Two-step launch:
-            // 1. Open workspace with claude (interactive, system prompt loaded)
-            // 2. Send the initial instruction so Claude starts working immediately
-            let cmd = "claude --dangerously-skip-permissions --system-prompt-file \(promptFile)"
+            // Launch claude with --resume so it kicks off AND stays interactive
+            let initialPrompt = "Investigate \(jiraKey). Read your system prompt for the full ticket description. Explore the codebase, assess what needs to change, and give me your findings and a proposed plan."
+                .replacingOccurrences(of: "'", with: "'\\''")
+
+            let cmd = "claude --dangerously-skip-permissions --system-prompt-file \(promptFile) --resume -p '\(initialPrompt)'"
 
             let process = Process()
             process.executableURL = URL(fileURLWithPath: cmuxCLI)
             process.arguments = ["new-workspace", "--name", jiraKey, "--command", cmd]
             try? process.run()
-
-            // Wait for claude to start, then send the kick-off message
-            try? await Task.sleep(nanoseconds: 3_000_000_000) // 3 seconds
-
-            let kickoff = Process()
-            kickoff.executableURL = URL(fileURLWithPath: cmuxCLI)
-            kickoff.arguments = [
-                "send",
-                "Investigate \(jiraKey). Read your system prompt for the full ticket description. " +
-                "Explore the codebase, assess what needs to change, and give me your findings and a proposed plan."
-            ]
-            try? kickoff.run()
         }
     }
 
