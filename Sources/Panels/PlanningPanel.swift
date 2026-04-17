@@ -101,51 +101,23 @@ final class PlanningPanel: Panel, ObservableObject {
             return
         }
 
-        // New investigation — open claude with system prompt in repo context
+        // New investigation — load formula from ~/.factory/formulas/
         Task {
             await loadDetail(for: beadId)
-            let title = selectedDetail?.title ?? ""
+
+            // Load investigate formula from disk and template with bead context
+            let template = FactoryConfig.readFormula("investigate")
+                ?? "# Investigate {{BEAD_ID}}: {{TITLE}}\n\n{{DESCRIPTION}}\n\nExplore the codebase and report findings."
+            let systemPrompt = templateFormula(template, beadId: beadId, jiraKey: jiraKey)
 
             let promptFile = "/tmp/factory-investigate-\(beadId).md"
-            let systemPrompt = """
-            # Investigating \(jiraKey): \(title)
-
-            You are investigating this ticket to understand its scope and plan the work.
-
-            ## Description
-
-            \(selectedDetail?.description ?? "No description")
-
-            ## Instructions
-
-            1. Read the description carefully
-            2. If you need to make changes, create a git worktree first:
-               ```
-               git fetch origin
-               WORKTREE_DIR="../worktrees/\(beadId)"
-               git worktree add "$WORKTREE_DIR" -b \(beadId)/investigation origin/main
-               cd "$WORKTREE_DIR"
-               ```
-            3. Explore the codebase to understand what needs to change
-            4. Assess complexity and risks
-            5. Propose an implementation approach
-            6. Record findings: run `bd comment \(beadId) "Investigation: <findings>"`
-
-            ## Bead Info
-            - ID: \(beadId)
-            - JIRA: \(jiraKey)
-            - Status: \(selectedDetail?.status ?? "unknown")
-            - Priority: P\(selectedDetail?.priority ?? 2)
-            """
             try? systemPrompt.write(toFile: promptFile, atomically: true, encoding: .utf8)
 
-            // Auto-prompt: background job sends to THIS workspace using $CMUX_WORKSPACE_ID
-            // This targets the exact workspace, not whatever's focused
             let sessionName = "factory-\(beadId)"
-            let investigatePrompt = "Investigate \(jiraKey). Read your system prompt for the full ticket description. Explore the codebase, assess what needs to change, and give me your findings and a proposed plan."
+            let kickoff = "Investigate \(jiraKey). Read your system prompt for the full ticket description. Explore the codebase, assess what needs to change, and give me your findings and a proposed plan."
                 .replacingOccurrences(of: "'", with: "'\\''")
 
-            let cmd = "(sleep 5 && cmux send --workspace $CMUX_WORKSPACE_ID '\(investigatePrompt)\\n') & claude --dangerously-skip-permissions --system-prompt-file \(promptFile) --name \(sessionName)"
+            let cmd = "(sleep 5 && cmux send --workspace $CMUX_WORKSPACE_ID '\(kickoff)\\n') & claude --dangerously-skip-permissions --system-prompt-file \(promptFile) --name \(sessionName)"
 
             let process = Process()
             process.executableURL = URL(fileURLWithPath: cmuxCLI)
@@ -180,33 +152,59 @@ final class PlanningPanel: Panel, ObservableObject {
         return nil
     }
 
-    func delegate(beadId: String) {
-        // TODO: read formula from ~/.factory/formulas/implement.md
-        // For now, use factory CLI as a bridge for delegate
+    func delegate(beadId: String, formula: String = "implement") {
         let cmuxCLI = "/Applications/cmux.app/Contents/Resources/bin/cmux"
+        let jiraKey = beadId.uppercased()
+
         Task {
             await loadDetail(for: beadId)
-            let jiraKey = beadId.uppercased()
-            let title = selectedDetail?.title ?? ""
-            let desc = (selectedDetail?.description ?? "").prefix(400)
-                .replacingOccurrences(of: "'", with: "'\\''")
-                .replacingOccurrences(of: "\n", with: " ")
 
-            let promptFile = "/tmp/factory-delegate-\(beadId).md"
-            let systemPrompt = "# Implement \(jiraKey): \(title)\n\n\(selectedDetail?.description ?? "")\n\nFollow the implement formula: plan → branch → worktree → code → test → PR."
-            try? systemPrompt.write(toFile: promptFile, atomically: true, encoding: .utf8)
+            // Load formula from ~/.factory/formulas/ and template with bead context
+            let template = FactoryConfig.readFormula(formula)
+                ?? "# \(formula.capitalized) {{BEAD_ID}}: {{TITLE}}\n\n{{DESCRIPTION}}"
+            let systemPrompt = templateFormula(template, beadId: beadId, jiraKey: jiraKey)
+
+            // Include child beads for epics
+            var childContext = ""
+            if selectedDetail?.isEpic == true {
+                if let childJson = await runFactory(["list", "--epic", beadId, "--json"]),
+                   let data = childJson.data(using: .utf8),
+                   let children = try? JSONDecoder().decode([CLIBeadSummary].self, from: data) {
+                    childContext = "\n\n## Child Beads\n" + children.map {
+                        "- \($0.id.uppercased()) [\($0.status)] \($0.title)"
+                    }.joined(separator: "\n")
+                }
+            }
+
+            let promptFile = "/tmp/factory-\(formula)-\(beadId).md"
+            try? (systemPrompt + childContext).write(toFile: promptFile, atomically: true, encoding: .utf8)
 
             let sessionName = "factory-\(beadId)"
-            let prompt = "Implement \(jiraKey). Read your system prompt, create a worktree, and start implementing."
+            let kickoff = "\(formula.capitalized) \(jiraKey). Read your system prompt and begin."
                 .replacingOccurrences(of: "'", with: "'\\''")
 
-            let cmd = "(sleep 5 && cmux send --workspace $CMUX_WORKSPACE_ID '\(prompt)\\n') & claude --dangerously-skip-permissions --system-prompt-file \(promptFile) --name \(sessionName)"
+            let cmd = "(sleep 5 && cmux send --workspace $CMUX_WORKSPACE_ID '\(kickoff)\\n') & claude --dangerously-skip-permissions --system-prompt-file \(promptFile) --name \(sessionName)"
 
             let process = Process()
             process.executableURL = URL(fileURLWithPath: cmuxCLI)
-            process.arguments = ["new-workspace", "--name", "impl-\(jiraKey)", "--command", cmd]
+            process.arguments = ["new-workspace", "--name", "\(formula)-\(jiraKey)", "--command", cmd]
             try? process.run()
         }
+    }
+
+    // MARK: - Template Helper
+
+    private func templateFormula(_ template: String, beadId: String, jiraKey: String) -> String {
+        template
+            .replacingOccurrences(of: "{{BEAD_ID}}", with: beadId)
+            .replacingOccurrences(of: "{{BEAD_ID_UPPER}}", with: jiraKey)
+            .replacingOccurrences(of: "{{BEAD_ID_LOWER}}", with: beadId.lowercased())
+            .replacingOccurrences(of: "{{TITLE}}", with: selectedDetail?.title ?? "")
+            .replacingOccurrences(of: "{{DESCRIPTION}}", with: selectedDetail?.description ?? "")
+            .replacingOccurrences(of: "{{PARENT_ID}}", with: selectedDetail?.parent ?? "none")
+            .replacingOccurrences(of: "{{PR_NUMBER}}", with: "")
+            .replacingOccurrences(of: "{{PR_REF}}", with: "")
+            .replacingOccurrences(of: "{{REPO}}", with: "")
     }
 
     // MARK: - Private

@@ -43,6 +43,9 @@
 		A5001420 /* MarkdownPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001418 /* MarkdownPanel.swift */; };
 		FA001003 /* PlanningPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA001001 /* PlanningPanel.swift */; };
 		FA001004 /* PlanningPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA001002 /* PlanningPanelView.swift */; };
+		FA001006 /* FactoryConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA001005 /* FactoryConfig.swift */; };
+		FA001003 /* PlanningPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA001001 /* PlanningPanel.swift */; };
+		FA001004 /* PlanningPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA001002 /* PlanningPanelView.swift */; };
 		FA001003 /* PlanningPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA001001 /* PlanningPanel.swift */; };
 		FA001004 /* PlanningPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA001002 /* PlanningPanelView.swift */; };
 		FA001003 /* PlanningPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA001001 /* PlanningPanel.swift */; };
@@ -257,6 +260,9 @@
 		A5007423 /* BrowserWebAuthnSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/BrowserWebAuthnSupport.swift; sourceTree = "<group>"; };
 		A5001415 /* PanelContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/PanelContentView.swift; sourceTree = "<group>"; };
 		A5001418 /* MarkdownPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/MarkdownPanel.swift; sourceTree = "<group>"; };
+		FA001001 /* PlanningPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/PlanningPanel.swift; sourceTree = "<group>"; };
+		FA001002 /* PlanningPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/PlanningPanelView.swift; sourceTree = "<group>"; };
+		FA001005 /* FactoryConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Factory/FactoryConfig.swift; sourceTree = "<group>"; };
 		FA001001 /* PlanningPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/PlanningPanel.swift; sourceTree = "<group>"; };
 		FA001002 /* PlanningPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/PlanningPanelView.swift; sourceTree = "<group>"; };
 		FA001001 /* PlanningPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/PlanningPanel.swift; sourceTree = "<group>"; };
@@ -520,6 +526,9 @@
 				A5007421 /* BrowserPopupWindowController.swift */,
 				A5007423 /* BrowserWebAuthnSupport.swift */,
 				A5001418 /* MarkdownPanel.swift */,
+				FA001001 /* PlanningPanel.swift */,
+				FA001002 /* PlanningPanelView.swift */,
+				FA001005 /* FactoryConfig.swift */,
 				FA001001 /* PlanningPanel.swift */,
 				FA001002 /* PlanningPanelView.swift */,
 				FA001001 /* PlanningPanel.swift */,
@@ -857,6 +866,9 @@
 				A5007420 /* BrowserPopupWindowController.swift in Sources */,
 				A5007422 /* BrowserWebAuthnSupport.swift in Sources */,
 				A5001420 /* MarkdownPanel.swift in Sources */,
+				FA001003 /* PlanningPanel.swift in Sources */,
+				FA001004 /* PlanningPanelView.swift in Sources */,
+				FA001006 /* FactoryConfig.swift in Sources */,
 				FA001003 /* PlanningPanel.swift in Sources */,
 				FA001004 /* PlanningPanelView.swift in Sources */,
 				FA001003 /* PlanningPanel.swift in Sources */,
