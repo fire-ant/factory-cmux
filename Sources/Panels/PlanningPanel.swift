@@ -44,13 +44,12 @@ final class PlanningPanel: Panel, ObservableObject {
     func unfocus() {}
     func triggerFlash(reason: WorkspaceAttentionFlashReason) {}
 
-    // MARK: - Data
+    // MARK: - Data (via factory CLI until MySQLNIO is added via Xcode UI)
 
     func refresh() async {
         isLoading = true
         defer { isLoading = false }
 
-        // Use factory CLI with JSON output for structured data
         if let json = await runFactory(["list", "--json"]) {
             if let data = json.data(using: .utf8),
                let items = try? JSONDecoder().decode([CLIBeadSummary].self, from: data) {
@@ -68,6 +67,21 @@ final class PlanningPanel: Panel, ObservableObject {
                 selectedDetail = detail.toBeadDetail()
             }
         }
+    }
+
+    private func runFactory(_ args: [String]) async -> String? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/Users/clavery/factory/target/debug/factory")
+        process.arguments = args
+        process.currentDirectoryURL = URL(fileURLWithPath: "/Users/clavery/factory")
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            process.waitUntilExit()
+            return String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
+        } catch { return nil }
     }
 
     func investigate(beadId: String) {
@@ -167,8 +181,31 @@ final class PlanningPanel: Panel, ObservableObject {
     }
 
     func delegate(beadId: String) {
+        // TODO: read formula from ~/.factory/formulas/implement.md
+        // For now, use factory CLI as a bridge for delegate
+        let cmuxCLI = "/Applications/cmux.app/Contents/Resources/bin/cmux"
         Task {
-            let _ = await runFactory(["delegate", beadId, "--formula", "implement"])
+            await loadDetail(for: beadId)
+            let jiraKey = beadId.uppercased()
+            let title = selectedDetail?.title ?? ""
+            let desc = (selectedDetail?.description ?? "").prefix(400)
+                .replacingOccurrences(of: "'", with: "'\\''")
+                .replacingOccurrences(of: "\n", with: " ")
+
+            let promptFile = "/tmp/factory-delegate-\(beadId).md"
+            let systemPrompt = "# Implement \(jiraKey): \(title)\n\n\(selectedDetail?.description ?? "")\n\nFollow the implement formula: plan → branch → worktree → code → test → PR."
+            try? systemPrompt.write(toFile: promptFile, atomically: true, encoding: .utf8)
+
+            let sessionName = "factory-\(beadId)"
+            let prompt = "Implement \(jiraKey). Read your system prompt, create a worktree, and start implementing."
+                .replacingOccurrences(of: "'", with: "'\\''")
+
+            let cmd = "(sleep 5 && cmux send --workspace $CMUX_WORKSPACE_ID '\(prompt)\\n') & claude --dangerously-skip-permissions --system-prompt-file \(promptFile) --name \(sessionName)"
+
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: cmuxCLI)
+            process.arguments = ["new-workspace", "--name", "impl-\(jiraKey)", "--command", cmd]
+            try? process.run()
         }
     }
 
@@ -181,83 +218,6 @@ final class PlanningPanel: Panel, ObservableObject {
                 await self?.refresh()
             }
         }
-    }
-
-    private func runFactory(_ args: [String]) async -> String? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/Users/clavery/factory/target/debug/factory")
-        process.arguments = args
-        process.currentDirectoryURL = URL(fileURLWithPath: "/Users/clavery/factory")
-
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            return String(data: data, encoding: .utf8)
-        } catch {
-            return nil
-        }
-    }
-}
-
-// MARK: - CLI JSON Types (Decodable)
-
-private struct CLIBeadSummary: Decodable {
-    let id: String
-    let title: String
-    let status: String
-    let jira_status: String?
-    let priority: Int
-    let issue_type: String
-    let assignee: String?
-    let labels: [String]?
-    let parent: String?
-    let pr: String?
-    let pr_state: String?
-    let ci: String?
-    let review: String?
-    let attention: [String]?
-
-    func toBeadSummary() -> BeadSummary {
-        BeadSummary(
-            id: id, title: title, status: status,
-            jiraStatus: jira_status, priority: priority,
-            issueType: issue_type, assignee: assignee,
-            labels: labels ?? [], parent: parent,
-            pr: pr, prState: pr_state, ci: ci,
-            review: review, attention: attention ?? []
-        )
-    }
-}
-
-private struct CLIBeadDetail: Decodable {
-    let id: String
-    let title: String
-    let description: String?
-    let status: String
-    let priority: Int
-    let issue_type: String?
-    let assignee: String?
-    let external_ref: String?
-    let parent: String?
-    let labels: [String]?
-    let created_at: String?
-    let updated_at: String?
-
-    func toBeadDetail() -> BeadDetail {
-        BeadDetail(
-            id: id, title: title,
-            description: description ?? "",
-            status: status, jiraStatus: nil,
-            priority: priority, issueType: issue_type,
-            assignee: assignee, externalRef: external_ref,
-            parent: parent, labels: labels ?? [],
-            createdAt: created_at, updatedAt: updated_at
-        )
     }
 }
 
@@ -314,4 +274,37 @@ enum AssignmentFilter: String, CaseIterable {
     case mine = "Mine"
     case open = "Open"
     case all = "All"
+}
+
+// MARK: - CLI JSON Bridge (until MySQLNIO is added via Xcode UI)
+
+private struct CLIBeadSummary: Decodable {
+    let id: String; let title: String; let status: String
+    let jira_status: String?; let priority: Int; let issue_type: String
+    let assignee: String?; let labels: [String]?; let parent: String?
+    let pr: String?; let pr_state: String?; let ci: String?
+    let review: String?; let attention: [String]?
+
+    func toBeadSummary() -> BeadSummary {
+        BeadSummary(id: id, title: title, status: status,
+            jiraStatus: jira_status, priority: priority, issueType: issue_type,
+            assignee: assignee, labels: labels ?? [], parent: parent,
+            pr: pr, prState: pr_state, ci: ci, review: review,
+            attention: attention ?? [])
+    }
+}
+
+private struct CLIBeadDetail: Decodable {
+    let id: String; let title: String; let description: String?
+    let status: String; let priority: Int; let issue_type: String?
+    let assignee: String?; let external_ref: String?; let parent: String?
+    let labels: [String]?; let created_at: String?; let updated_at: String?
+
+    func toBeadDetail() -> BeadDetail {
+        BeadDetail(id: id, title: title, description: description ?? "",
+            status: status, jiraStatus: nil, priority: priority,
+            issueType: issue_type, assignee: assignee,
+            externalRef: external_ref, parent: parent,
+            labels: labels ?? [], createdAt: created_at, updatedAt: updated_at)
+    }
 }
