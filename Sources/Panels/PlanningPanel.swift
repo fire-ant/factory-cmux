@@ -91,7 +91,7 @@ final class PlanningPanel: Panel, ObservableObject {
         // Check if there's an existing session for this bead
         if let sessionId = beadSessions[beadId] {
             // Resume existing session in a new workspace
-            let cmd = "claude --resume \(sessionId) --dangerously-skip-permissions"
+            let cmd = "claude --resume \(sessionId) --dangerously-skip-permissions --mcp-config ~/.factory/mcp-servers.json"
             Task {
                 let process = Process()
                 process.executableURL = URL(fileURLWithPath: cmuxCLI)
@@ -117,7 +117,7 @@ final class PlanningPanel: Panel, ObservableObject {
             let kickoff = "Investigate \(jiraKey). Read your system prompt for the full ticket description. Explore the codebase, assess what needs to change, and give me your findings and a proposed plan."
                 .replacingOccurrences(of: "'", with: "'\\''")
 
-            let cmd = "(sleep 5 && cmux send --workspace $CMUX_WORKSPACE_ID '\(kickoff)\\n') & claude --dangerously-skip-permissions --system-prompt-file \(promptFile) --name \(sessionName)"
+            let cmd = "(sleep 5 && cmux send --workspace $CMUX_WORKSPACE_ID '\(kickoff)\\n') & claude --dangerously-skip-permissions --system-prompt-file \(promptFile) --mcp-config ~/.factory/mcp-servers.json --name \(sessionName)"
 
             let process = Process()
             process.executableURL = URL(fileURLWithPath: cmuxCLI)
@@ -183,7 +183,7 @@ final class PlanningPanel: Panel, ObservableObject {
             let kickoff = "\(formula.capitalized) \(jiraKey). Read your system prompt and begin."
                 .replacingOccurrences(of: "'", with: "'\\''")
 
-            let cmd = "(sleep 5 && cmux send --workspace $CMUX_WORKSPACE_ID '\(kickoff)\\n') & claude --dangerously-skip-permissions --system-prompt-file \(promptFile) --name \(sessionName)"
+            let cmd = "(sleep 5 && cmux send --workspace $CMUX_WORKSPACE_ID '\(kickoff)\\n') & claude --dangerously-skip-permissions --system-prompt-file \(promptFile) --mcp-config ~/.factory/mcp-servers.json --name \(sessionName)"
 
             let process = Process()
             process.executableURL = URL(fileURLWithPath: cmuxCLI)
